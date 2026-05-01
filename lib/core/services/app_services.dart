@@ -1,4 +1,3 @@
-import '../connectivity/connectivity_host.dart';
 import '../navigation/app_navigator.dart';
 import '../network/api_client.dart';
 import '../network/api_config.dart';
@@ -37,12 +36,9 @@ class AppServices {
   static final AppSessionController session = AppSessionController();
   static final SessionExpirationCoordinator sessionExpirationCoordinator =
       SessionExpirationCoordinator(sessionController: session);
-  static final AppConnectivityController connectivity =
-      AppConnectivityController();
   static final ApiClient apiClient = ApiClient(
     baseUrl: ApiConfig.baseUrl,
     onUnauthorized: sessionExpirationCoordinator.handleUnauthorized,
-    isOffline: () => connectivity.isOffline,
   );
   static final bool useMockRepositories = ApiConfig.useMockRepositories;
   static const DeviceIdentifierService deviceIdentifierService =

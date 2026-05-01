@@ -45,6 +45,15 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
   late final TextEditingController _codeController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
+  late final TextEditingController _birthDateController;
+  late final TextEditingController _identityNumberController;
+  late final TextEditingController _identityIssueDateController;
+  late final TextEditingController _identityExpiryDateController;
+  late final TextEditingController _identityPlaceController;
+  late final TextEditingController _nationalityController;
+  late final TextEditingController _shamCashAccountController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _emergencyContactController;
   late final TextEditingController _departmentController;
   late final TextEditingController _jobTitleController;
   late final TextEditingController _workLocationController;
@@ -52,6 +61,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
   late final TextEditingController _joinDateController;
   late final TextEditingController _passwordController;
   late AppUserRole _selectedAccountRole;
+  late EmployeeJobLevel _selectedJobLevel;
   int? _selectedManagerId;
 
   bool get _isEdit => widget.initialProfile != null;
@@ -80,6 +90,31 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     _phoneController = TextEditingController(
       text: profile == null || profile.phone == '--' ? '' : profile.phone,
     );
+    _birthDateController = TextEditingController(
+      text: profile?.birthDate ?? '',
+    );
+    _identityNumberController = TextEditingController(
+      text: profile?.identityNumber ?? '',
+    );
+    _identityIssueDateController = TextEditingController(
+      text: profile?.identityIssueDate ?? '',
+    );
+    _identityExpiryDateController = TextEditingController(
+      text: profile?.identityExpiryDate ?? '',
+    );
+    _identityPlaceController = TextEditingController(
+      text: profile?.identityPlace ?? '',
+    );
+    _nationalityController = TextEditingController(
+      text: profile?.nationality ?? '',
+    );
+    _shamCashAccountController = TextEditingController(
+      text: profile?.shamCashAccount ?? '',
+    );
+    _addressController = TextEditingController(text: profile?.address ?? '');
+    _emergencyContactController = TextEditingController(
+      text: profile?.emergencyContact ?? '',
+    );
     _departmentController = TextEditingController(
       text: profile == null || profile.department == '--'
           ? ''
@@ -102,6 +137,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
       text: profile == null || profile.joinDate == '--' ? '' : profile.joinDate,
     );
     _passwordController = TextEditingController();
+    _selectedJobLevel = profile?.jobLevel ?? EmployeeJobLevel.member;
     _selectedManagerId = _selectedAccountRole == AppUserRole.employee
         ? profile?.managerId ??
               (widget.managerOptions.isEmpty
@@ -116,6 +152,15 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     _codeController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _birthDateController.dispose();
+    _identityNumberController.dispose();
+    _identityIssueDateController.dispose();
+    _identityExpiryDateController.dispose();
+    _identityPlaceController.dispose();
+    _nationalityController.dispose();
+    _shamCashAccountController.dispose();
+    _addressController.dispose();
+    _emergencyContactController.dispose();
     _departmentController.dispose();
     _jobTitleController.dispose();
     _workLocationController.dispose();
@@ -138,6 +183,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _buildSectionTitle(context, 'البيانات الأساسية'),
                 _buildTextField(
                   controller: _nameController,
                   label: 'اسم الموظف',
@@ -170,6 +216,97 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                   requiredField: false,
                 ),
                 const SizedBox(height: 12),
+                _buildDateField(
+                  context,
+                  controller: _birthDateController,
+                  label: 'تاريخ الميلاد',
+                  requiredField: false,
+                  firstDate: DateTime(1940),
+                  lastDate: DateTime.now(),
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _addressController,
+                  label: 'العنوان',
+                  requiredField: false,
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _emergencyContactController,
+                  label: 'رقم الطوارئ',
+                  keyboardType: TextInputType.phone,
+                  requiredField: false,
+                ),
+                const SizedBox(height: 18),
+                _buildSectionTitle(context, 'الهوية الرسمية والحسابات'),
+                _buildTextField(
+                  controller: _identityNumberController,
+                  label: 'رقم الهوية',
+                  keyboardType: TextInputType.number,
+                  requiredField: false,
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _identityPlaceController,
+                  label: 'مكان القيد / الإصدار',
+                  requiredField: false,
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _nationalityController,
+                  label: 'الجنسية',
+                  requiredField: false,
+                ),
+                const SizedBox(height: 12),
+                _buildDateField(
+                  context,
+                  controller: _identityIssueDateController,
+                  label: 'تاريخ إصدار الهوية',
+                  requiredField: false,
+                  firstDate: DateTime(1980),
+                  lastDate: DateTime(2100),
+                ),
+                const SizedBox(height: 12),
+                _buildDateField(
+                  context,
+                  controller: _identityExpiryDateController,
+                  label: 'تاريخ انتهاء الهوية',
+                  requiredField: false,
+                  firstDate: DateTime(1980),
+                  lastDate: DateTime(2100),
+                ),
+                const SizedBox(height: 12),
+                _buildTextField(
+                  controller: _shamCashAccountController,
+                  label: 'رقم حساب شام كاش',
+                  requiredField: false,
+                ),
+                const SizedBox(height: 18),
+                _buildSectionTitle(context, 'البيانات الوظيفية'),
+                DropdownButtonFormField<EmployeeJobLevel>(
+                  initialValue: _selectedJobLevel,
+                  decoration: const InputDecoration(
+                    labelText: 'السوية الوظيفية',
+                    prefixIcon: Icon(Icons.account_tree_outlined),
+                  ),
+                  items: EmployeeJobLevel.values
+                      .map(
+                        (level) => DropdownMenuItem<EmployeeJobLevel>(
+                          value: level,
+                          child: Text(level.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _selectedJobLevel = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
                 _buildTextField(
                   controller: _departmentController,
                   label: 'القسم',
@@ -191,7 +328,11 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                   hintText: _defaultWorkSchedule,
                 ),
                 const SizedBox(height: 12),
-                _buildDateField(context),
+                _buildDateField(
+                  context,
+                  controller: _joinDateController,
+                  label: 'تاريخ الانضمام',
+                ),
                 if (_isAdmin) ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<AppUserRole>(
@@ -298,22 +439,49 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     );
   }
 
-  Widget _buildDateField(BuildContext context) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
+  Widget _buildDateField(
+    BuildContext context, {
+    required TextEditingController controller,
+    required String label,
+    bool requiredField = true,
+    DateTime? firstDate,
+    DateTime? lastDate,
+  }) {
     return TextFormField(
-      controller: _joinDateController,
+      controller: controller,
       readOnly: true,
       decoration: InputDecoration(
-        labelText: 'تاريخ الانضمام',
+        labelText: label,
         hintText: 'YYYY-MM-DD',
         prefixIcon: const Icon(Icons.calendar_month_outlined),
         suffixIcon: IconButton(
-          onPressed: () => _pickJoinDate(context),
+          onPressed: () => _pickDate(
+            context,
+            controller: controller,
+            firstDate: firstDate,
+            lastDate: lastDate,
+          ),
           icon: const Icon(Icons.edit_calendar_outlined),
         ),
       ),
       validator: (value) {
+        if (!requiredField) {
+          return null;
+        }
         if (value == null || value.trim().isEmpty) {
-          return 'اختر تاريخ الانضمام';
+          return 'اختر $label';
         }
         return null;
       },
@@ -348,14 +516,24 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     );
   }
 
-  Future<void> _pickJoinDate(BuildContext context) async {
-    final initial =
-        DateTime.tryParse(_joinDateController.text) ?? DateTime.now();
+  Future<void> _pickDate(
+    BuildContext context, {
+    required TextEditingController controller,
+    DateTime? firstDate,
+    DateTime? lastDate,
+  }) async {
+    final initial = DateTime.tryParse(controller.text) ?? DateTime.now();
+    final first = firstDate ?? DateTime(2000);
+    final last = lastDate ?? DateTime(2100);
     final selected = await showDatePicker(
       context: context,
-      initialDate: initial,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      initialDate: initial.isBefore(first)
+          ? first
+          : initial.isAfter(last)
+          ? last
+          : initial,
+      firstDate: first,
+      lastDate: last,
     );
     if (selected == null || !mounted) {
       return;
@@ -363,7 +541,7 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
 
     final month = selected.month.toString().padLeft(2, '0');
     final day = selected.day.toString().padLeft(2, '0');
-    _joinDateController.text = '${selected.year}-$month-$day';
+    controller.text = '${selected.year}-$month-$day';
   }
 
   void _submit() {
@@ -378,6 +556,16 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
         code: _codeController.text.trim(),
         email: _emailController.text.trim(),
         phone: _phoneController.text.trim(),
+        birthDate: _birthDateController.text.trim(),
+        identityNumber: _identityNumberController.text.trim(),
+        identityIssueDate: _identityIssueDateController.text.trim(),
+        identityExpiryDate: _identityExpiryDateController.text.trim(),
+        identityPlace: _identityPlaceController.text.trim(),
+        nationality: _nationalityController.text.trim(),
+        shamCashAccount: _shamCashAccountController.text.trim(),
+        address: _addressController.text.trim(),
+        emergencyContact: _emergencyContactController.text.trim(),
+        jobLevel: _selectedJobLevel,
         department: _departmentController.text.trim(),
         jobTitle: _jobTitleController.text.trim(),
         workLocation: _workLocationController.text.trim(),

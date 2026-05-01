@@ -13,7 +13,6 @@ class ApiClient {
     this.connectTimeout = ApiConfig.connectTimeout,
     this.receiveTimeout = ApiConfig.receiveTimeout,
     this.onUnauthorized,
-    this.isOffline,
     http.Client? httpClient,
   }) : _httpClient = httpClient ?? http.Client();
 
@@ -21,7 +20,6 @@ class ApiClient {
   final Duration connectTimeout;
   final Duration receiveTimeout;
   final Future<void> Function()? onUnauthorized;
-  final bool Function()? isOffline;
   final http.Client _httpClient;
 
   Future<dynamic> get(
@@ -45,8 +43,6 @@ class ApiClient {
     Map<String, String>? queryParameters,
     bool handleUnauthorized = false,
   }) async {
-    _throwIfOffline();
-
     final request = _buildRequest(
       method: 'GET',
       path: path,
@@ -80,11 +76,11 @@ class ApiClient {
       );
     } on TimeoutException {
       throw const ApiException(
-        'انتهت مهلة الاتصال بالخادم. تحقق من الشبكة أو عنوان الـ API ثم حاول مرة أخرى.',
+        'انتهت مهلة الوصول إلى الخادم المحلي. تأكد أن خادم Laravel يعمل وأن عنوان الـ API صحيح.',
       );
     } on http.ClientException {
       throw const ApiException(
-        'تعذر الوصول إلى خادم Laravel. تحقق من عنوان الـ API والاتصال ثم حاول مرة أخرى.',
+        'تعذر الوصول إلى خادم Laravel المحلي. تأكد أن الخادم يعمل على الراوتر الداخلي وأن عنوان الـ API صحيح.',
       );
     }
   }
@@ -104,6 +100,84 @@ class ApiClient {
       queryParameters: queryParameters,
       handleUnauthorized: handleUnauthorized,
     );
+  }
+
+  Future<dynamic> multipart(
+    String path, {
+    required String method,
+    String? accessToken,
+    Map<String, String>? fields,
+    List<ApiUploadFile> files = const [],
+    bool handleUnauthorized = false,
+  }) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final request = http.MultipartRequest(method, uri)
+      ..headers['Accept'] = 'application/json';
+
+    if (accessToken != null && accessToken.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $accessToken';
+    }
+
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    for (final file in files) {
+      if (file.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            file.field,
+            file.bytes!,
+            filename: file.fileName,
+          ),
+        );
+      } else if (file.path != null && file.path!.isNotEmpty) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            file.field,
+            file.path!,
+            filename: file.fileName,
+          ),
+        );
+      }
+    }
+
+    try {
+      final streamedResponse = await _httpClient
+          .send(request)
+          .timeout(connectTimeout);
+      final response = await http.Response.fromStream(
+        streamedResponse,
+      ).timeout(receiveTimeout);
+      final decodedBody = _decodeResponseBody(response.bodyBytes);
+
+      if (response.statusCode == 401 && handleUnauthorized) {
+        await onUnauthorized?.call();
+        throw const ApiException(
+          'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى.',
+          statusCode: 401,
+        );
+      }
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final message =
+            _extractErrorMessage(decodedBody) ??
+            'فشل رفع الملف. رمز الحالة: ${response.statusCode}.';
+        throw ApiException(message, statusCode: response.statusCode);
+      }
+
+      return decodedBody;
+    } on TimeoutException {
+      throw const ApiException(
+        'انتهت مهلة رفع الملف إلى الخادم المحلي. تأكد أن خادم Laravel يعمل وأن عنوان الـ API صحيح.',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        'تعذر الوصول إلى خادم Laravel المحلي أثناء رفع الملف. تأكد أن الخادم يعمل على الراوتر الداخلي وأن عنوان الـ API صحيح.',
+      );
+    } on FormatException {
+      throw const ApiException('استجابة الخادم ليست بصيغة JSON متوقعة.');
+    }
   }
 
   Future<dynamic> patch(
@@ -148,8 +222,6 @@ class ApiClient {
     Map<String, String>? queryParameters,
     required bool handleUnauthorized,
   }) async {
-    _throwIfOffline();
-
     final request = _buildRequest(
       method: method,
       path: path,
@@ -180,22 +252,14 @@ class ApiClient {
       return decodedBody;
     } on TimeoutException {
       throw const ApiException(
-        'انتهت مهلة الاتصال بالخادم. تحقق من الشبكة أو عنوان الـ API ثم حاول مرة أخرى.',
+        'انتهت مهلة الوصول إلى الخادم المحلي. تأكد أن خادم Laravel يعمل وأن عنوان الـ API صحيح.',
       );
     } on http.ClientException {
       throw const ApiException(
-        'تعذر الوصول إلى خادم Laravel. تحقق من عنوان الـ API والاتصال ثم حاول مرة أخرى.',
+        'تعذر الوصول إلى خادم Laravel المحلي. تأكد أن الخادم يعمل على الراوتر الداخلي وأن عنوان الـ API صحيح.',
       );
     } on FormatException {
       throw const ApiException('استجابة الخادم ليست بصيغة JSON متوقعة.');
-    }
-  }
-
-  void _throwIfOffline() {
-    if (isOffline?.call() == true) {
-      throw const ApiException(
-        'لا يوجد اتصال بالإنترنت حاليًا. تحقق من الشبكة ثم حاول مرة أخرى.',
-      );
     }
   }
 
@@ -313,4 +377,18 @@ class ApiBinaryResponse {
   final Uint8List bytes;
   final String? fileName;
   final String? contentType;
+}
+
+class ApiUploadFile {
+  const ApiUploadFile({
+    required this.field,
+    required this.fileName,
+    this.path,
+    this.bytes,
+  });
+
+  final String field;
+  final String fileName;
+  final String? path;
+  final Uint8List? bytes;
 }

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import '../core/connectivity/connectivity_host.dart';
 import '../core/navigation/app_navigator.dart';
 import '../core/navigation/app_routes.dart';
 import '../core/theme/app_theme.dart';
-import '../core/services/app_services.dart';
 import '../features/admin/presentation/pages/admin_dashboard_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/splash_screen.dart';
@@ -65,10 +63,7 @@ class HrManagerApp extends StatelessWidget {
       initialRoute: AppRoutes.splash,
       onGenerateRoute: _onGenerateRoute,
       builder: (context, child) {
-        return ConnectivityHost(
-          controller: AppServices.connectivity,
-          child: child ?? const SizedBox.shrink(),
-        );
+        return child ?? const SizedBox.shrink();
       },
       routes: {
         AppRoutes.splash: (_) => const SplashScreen(),

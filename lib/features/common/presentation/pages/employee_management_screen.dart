@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/navigation/app_routes.dart';
 import '../../../../core/services/app_services.dart';
@@ -8,10 +11,13 @@ import '../../domain/models/app_user_role.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_error_state.dart';
 import '../widgets/app_loading_state.dart';
+import '../widgets/employee_administrative_record_dialog.dart';
+import '../widgets/employee_cv_editor_dialog.dart';
 import '../widgets/employee_editor_dialog.dart';
 import '../widgets/employee_password_dialog.dart';
 import '../widgets/role_bottom_navigation_bar.dart';
 import '../../../manager/domain/models/employee_manager_option.dart';
+import '../../../manager/domain/models/employee_upsert_payload.dart';
 import '../../../manager/domain/models/manager_employee_profile.dart';
 
 part 'employee_management_sections.dart';
@@ -307,6 +313,371 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     });
   }
 
+  Future<void> _uploadDocument({
+    required ManagerEmployeeProfile employee,
+    required EmployeeDocumentType type,
+    required EmployeeDocumentSource source,
+  }) async {
+    final file = await _pickAttachment(source: source, imagesOnly: false);
+    if (file == null) {
+      return;
+    }
+
+    ManagerEmployeeProfile? updatedProfile;
+    await _mutateProfile(() async {
+      updatedProfile = await AppServices.employeeProfileRepository
+          .uploadEmployeeDocument(
+            employeeCode: employee.code,
+            type: type,
+            source: source,
+            title: type.label,
+            file: file,
+            runOcr: type == EmployeeDocumentType.identityImage,
+          );
+      return updatedProfile!;
+    }, 'تم رفع المستند وربطه بملف الموظف.');
+
+    final updated = updatedProfile;
+    if (!mounted ||
+        updated == null ||
+        type != EmployeeDocumentType.identityImage) {
+      return;
+    }
+
+    final identityDocument = updated.documents
+        .where(
+          (document) => document.type == EmployeeDocumentType.identityImage,
+        )
+        .cast<EmployeeProfileDocument?>()
+        .firstWhere(
+          (document) => document?.hasOcrSuggestions == true,
+          orElse: () => null,
+        );
+    if (identityDocument != null) {
+      await _reviewIdentitySuggestions(updated, identityDocument);
+    }
+  }
+
+  Future<void> _editCv(ManagerEmployeeProfile employee) async {
+    final cv = await showEmployeeCvEditorDialog(
+      context: context,
+      initialCv: employee.cvProfile,
+    );
+    if (cv == null) {
+      return;
+    }
+
+    await _mutateProfile(() {
+      return AppServices.employeeProfileRepository.saveEmployeeCv(
+        employeeCode: employee.code,
+        cvProfile: cv,
+      );
+    }, 'تم حفظ السيرة الذاتية اليدوية.');
+  }
+
+  Future<void> _uploadCvPdf(ManagerEmployeeProfile employee) async {
+    final file = await _pickAttachment(
+      source: EmployeeDocumentSource.scanner,
+      imagesOnly: false,
+    );
+    if (file == null) {
+      return;
+    }
+
+    await _mutateProfile(() {
+      return AppServices.employeeProfileRepository.uploadEmployeeCvPdf(
+        employeeCode: employee.code,
+        file: file,
+        suggestAutofill: true,
+      );
+    }, 'تم رفع ملف السيرة الذاتية واستخراج النص المتاح.');
+  }
+
+  Future<void> _autofillCvFromFile(ManagerEmployeeProfile employee) async {
+    if (employee.cvProfile.extractedText.trim().isEmpty &&
+        !employee.cvProfile.hasPdf) {
+      _showSnack('ارفع ملف PDF للسيرة الذاتية قبل التعبئة التلقائية.');
+      return;
+    }
+
+    await _mutateProfile(() {
+      return AppServices.employeeProfileRepository.autofillEmployeeCvFromFile(
+        employee.code,
+      );
+    }, 'تم اقتراح تعبئة الحقول اليدوية من الملف.');
+  }
+
+  Future<void> _regenerateCvSummary(ManagerEmployeeProfile employee) async {
+    await _mutateProfile(() {
+      return AppServices.employeeProfileRepository.regenerateEmployeeCvSummary(
+        employee.code,
+      );
+    }, 'تمت إعادة توليد الملخص المهني.');
+  }
+
+  Future<void> _addAdministrativeRecord(ManagerEmployeeProfile employee) async {
+    final record = await showAdministrativeRecordDialog(context: context);
+    if (record == null) {
+      return;
+    }
+
+    final attachment = await _pickOptionalAttachment();
+    await _mutateProfile(() {
+      return AppServices.employeeProfileRepository.addAdministrativeRecord(
+        employeeCode: employee.code,
+        record: record,
+        attachment: attachment,
+      );
+    }, 'تمت إضافة السجل الإداري.');
+  }
+
+  Future<void> _mutateProfile(
+    Future<ManagerEmployeeProfile> Function() action,
+    String successMessage,
+  ) async {
+    await _mutate(() async {
+      final updated = await action();
+      _replaceProfile(updated);
+      _showSnack(successMessage);
+    });
+  }
+
+  void _replaceProfile(ManagerEmployeeProfile updated) {
+    final nextProfiles = _profiles.map((employee) {
+      return employee.id == updated.id || employee.code == updated.code
+          ? updated
+          : employee;
+    }).toList();
+
+    setState(() {
+      _profiles = nextProfiles;
+      _selected = updated;
+    });
+  }
+
+  Future<EmployeeProfileAttachmentFile?> _pickOptionalAttachment() async {
+    final source = await showModalBottomSheet<EmployeeDocumentSource?>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              runSpacing: 8,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.block_outlined),
+                  title: const Text('بدون مرفق'),
+                  onTap: () => Navigator.of(context).pop(null),
+                ),
+                ...EmployeeDocumentSource.values.map(
+                  (source) => ListTile(
+                    leading: Icon(source.icon),
+                    title: Text(source.label),
+                    onTap: () => Navigator.of(context).pop(source),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null) {
+      return null;
+    }
+    return _pickAttachment(source: source, imagesOnly: false);
+  }
+
+  Future<EmployeeProfileAttachmentFile?> _pickAttachment({
+    required EmployeeDocumentSource source,
+    required bool imagesOnly,
+  }) async {
+    if (source == EmployeeDocumentSource.camera ||
+        source == EmployeeDocumentSource.gallery) {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: source == EmployeeDocumentSource.camera
+            ? ImageSource.camera
+            : ImageSource.gallery,
+        imageQuality: 88,
+      );
+      if (image == null) {
+        return null;
+      }
+      return EmployeeProfileAttachmentFile(
+        name: image.name,
+        path: kIsWeb ? null : image.path,
+        bytes: kIsWeb ? await image.readAsBytes() : null,
+        sizeBytes: await image.length(),
+        mimeType: image.mimeType,
+      );
+    }
+
+    final file = await openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: imagesOnly ? 'Images' : 'Documents',
+          extensions: imagesOnly
+              ? const ['jpg', 'jpeg', 'png']
+              : const ['pdf', 'jpg', 'jpeg', 'png'],
+          mimeTypes: imagesOnly
+              ? const ['image/jpeg', 'image/png']
+              : const ['application/pdf', 'image/jpeg', 'image/png'],
+          uniformTypeIdentifiers: imagesOnly
+              ? const ['public.jpeg', 'public.png']
+              : const ['com.adobe.pdf', 'public.jpeg', 'public.png'],
+        ),
+      ],
+    );
+    if (file == null) {
+      return null;
+    }
+    return EmployeeProfileAttachmentFile(
+      name: file.name,
+      path: kIsWeb ? null : file.path,
+      bytes: kIsWeb ? await file.readAsBytes() : null,
+      sizeBytes: await file.length(),
+      mimeType: file.mimeType ?? _mimeTypeForName(file.name),
+    );
+  }
+
+  String? _mimeTypeForName(String name) {
+    final dotIndex = name.lastIndexOf('.');
+    final extension = dotIndex == -1 ? null : name.substring(dotIndex + 1);
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _reviewIdentitySuggestions(
+    ManagerEmployeeProfile employee,
+    EmployeeProfileDocument document,
+  ) async {
+    final suggestions = document.ocrSuggestions;
+    final nameController = TextEditingController(
+      text: suggestions['name'] ?? employee.name,
+    );
+    final identityController = TextEditingController(
+      text: suggestions['identity_number'] ?? employee.identityNumber,
+    );
+    final birthDateController = TextEditingController(
+      text: suggestions['birth_date'] ?? employee.birthDate,
+    );
+    final placeController = TextEditingController(
+      text: suggestions['identity_place'] ?? employee.identityPlace,
+    );
+    final nationalityController = TextEditingController(
+      text: suggestions['nationality'] ?? employee.nationality,
+    );
+
+    final shouldApply = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('مراجعة بيانات الهوية'),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'الاسم'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: identityController,
+                    decoration: const InputDecoration(labelText: 'رقم الهوية'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: birthDateController,
+                    decoration: const InputDecoration(
+                      labelText: 'تاريخ الميلاد',
+                      hintText: 'YYYY-MM-DD',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: placeController,
+                    decoration: const InputDecoration(labelText: 'مكان القيد'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nationalityController,
+                    decoration: const InputDecoration(labelText: 'الجنسية'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('تجاهل الاقتراح'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('اعتماد البيانات'),
+            ),
+          ],
+        );
+      },
+    );
+
+    final payload = EmployeeUpsertPayload(
+      name: nameController.text.trim(),
+      code: employee.code,
+      email: employee.email,
+      phone: employee.phone == '--' ? '' : employee.phone,
+      department: employee.department == '--' ? '' : employee.department,
+      jobTitle: employee.jobTitle == '--' ? '' : employee.jobTitle,
+      workLocation: employee.workLocation == '--' ? '' : employee.workLocation,
+      workSchedule: employee.workSchedule == '--' ? '' : employee.workSchedule,
+      joinDate: employee.joinDate == '--' ? '' : employee.joinDate,
+      birthDate: birthDateController.text.trim(),
+      identityNumber: identityController.text.trim(),
+      identityIssueDate: employee.identityIssueDate,
+      identityExpiryDate: employee.identityExpiryDate,
+      identityPlace: placeController.text.trim(),
+      nationality: nationalityController.text.trim(),
+      shamCashAccount: employee.shamCashAccount,
+      address: employee.address,
+      emergencyContact: employee.emergencyContact,
+      jobLevel: employee.jobLevel,
+      managerId: employee.managerId,
+      role: _isAdmin ? employee.role : null,
+    );
+
+    nameController.dispose();
+    identityController.dispose();
+    birthDateController.dispose();
+    placeController.dispose();
+    nationalityController.dispose();
+
+    if (shouldApply != true || !mounted) {
+      return;
+    }
+
+    await _mutateProfile(() {
+      return AppServices.employeeProfileRepository.updateEmployee(
+        employeeCode: employee.code,
+        payload: payload,
+      );
+    }, 'تم اعتماد بيانات الهوية كمصدر أساسي.');
+  }
+
   Future<void> _archive() async {
     final employee = _current;
     if (employee == null || employee.isDeleted) {
@@ -497,7 +868,24 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                       'اختر موظفاً من القائمة لعرض ملفه وسجلاته.',
                                   icon: Icons.badge_outlined,
                                 )
-                              : _EmployeeDetailsColumn(employee: current);
+                              : _EmployeeDetailsColumn(
+                                  employee: current,
+                                  isBusy: _isBusy,
+                                  onUploadDocument: (type, source) =>
+                                      _uploadDocument(
+                                        employee: current,
+                                        type: type,
+                                        source: source,
+                                      ),
+                                  onEditCv: () => _editCv(current),
+                                  onUploadCvPdf: () => _uploadCvPdf(current),
+                                  onAutofillCv: () =>
+                                      _autofillCvFromFile(current),
+                                  onRegenerateCvSummary: () =>
+                                      _regenerateCvSummary(current),
+                                  onAddAdministrativeRecord: () =>
+                                      _addAdministrativeRecord(current),
+                                );
 
                           if (!wide) {
                             return Column(
@@ -529,7 +917,22 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                         icon: Icons.person_search_outlined,
                       )
                     else
-                      _EmployeeDetailsColumn(employee: current),
+                      _EmployeeDetailsColumn(
+                        employee: current,
+                        isBusy: _isBusy,
+                        onUploadDocument: (type, source) => _uploadDocument(
+                          employee: current,
+                          type: type,
+                          source: source,
+                        ),
+                        onEditCv: () => _editCv(current),
+                        onUploadCvPdf: () => _uploadCvPdf(current),
+                        onAutofillCv: () => _autofillCvFromFile(current),
+                        onRegenerateCvSummary: () =>
+                            _regenerateCvSummary(current),
+                        onAddAdministrativeRecord: () =>
+                            _addAdministrativeRecord(current),
+                      ),
                   ],
                 ],
               ),

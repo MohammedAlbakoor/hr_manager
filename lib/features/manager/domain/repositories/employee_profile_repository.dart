@@ -38,4 +38,38 @@ abstract class EmployeeProfileRepository {
   Future<List<ManagerEmployeeProfile>> updateAllMonthlyIncrements(
     double monthlyIncrement,
   );
+
+  Future<ManagerEmployeeProfile> uploadEmployeeDocument({
+    required String employeeCode,
+    required EmployeeDocumentType type,
+    required EmployeeDocumentSource source,
+    required String title,
+    required EmployeeProfileAttachmentFile file,
+    bool runOcr = false,
+  });
+
+  Future<ManagerEmployeeProfile> saveEmployeeCv({
+    required String employeeCode,
+    required EmployeeCvProfile cvProfile,
+  });
+
+  Future<ManagerEmployeeProfile> uploadEmployeeCvPdf({
+    required String employeeCode,
+    required EmployeeProfileAttachmentFile file,
+    bool suggestAutofill = true,
+  });
+
+  Future<ManagerEmployeeProfile> autofillEmployeeCvFromFile(
+    String employeeCode,
+  );
+
+  Future<ManagerEmployeeProfile> regenerateEmployeeCvSummary(
+    String employeeCode,
+  );
+
+  Future<ManagerEmployeeProfile> addAdministrativeRecord({
+    required String employeeCode,
+    required EmployeeAdministrativeRecordDraft record,
+    EmployeeProfileAttachmentFile? attachment,
+  });
 }

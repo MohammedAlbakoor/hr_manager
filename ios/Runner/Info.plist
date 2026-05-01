@@ -25,9 +25,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>نستخدم الكاميرا لمسح رمز QR عند تسجيل الحضور.</string>
+	<string>نستخدم الكاميرا لمسح رمز QR والتقاط وثائق الموظفين عند رفعها.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>نستخدم Face ID لتفعيل القفل البيومتري وفتح التطبيق.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>نستخدم الصور لاختيار وثائق الموظفين وإرفاقها بملفاتهم.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

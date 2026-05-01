@@ -42,5 +42,15 @@ class ApiEndpoints {
       '/users/employees/$code/restore';
   static String employeeMonthlyIncrement(String code) =>
       '/users/employees/$code/monthly-increment';
+  static String employeeDocuments(String code) =>
+      '/users/employees/$code/documents';
+  static String employeeCv(String code) => '/users/employees/$code/cv';
+  static String employeeCvPdf(String code) => '/users/employees/$code/cv/pdf';
+  static String employeeCvAutofill(String code) =>
+      '/users/employees/$code/cv/autofill-from-file';
+  static String employeeCvSummary(String code) =>
+      '/users/employees/$code/cv/regenerate-summary';
+  static String employeeAdministrativeRecords(String code) =>
+      '/users/employees/$code/administrative-records';
   static String managerBroadcast(String id) => '/notifications/broadcasts/$id';
 }
